@@ -1,0 +1,18 @@
+package edu.harvard.cscie98.sample_code;
+
+public class Allocation2 {
+    private int num1, num2;
+
+  public Allocation2(final int arg1, final int arg2) {
+      num1 = arg1;
+      num2 = arg2;
+      System.out.println("This is the " + num1 + " object");
+  }
+
+  public static void main(final String[] args) {
+      for(int i = 1; i < 100; i++) {
+	  new Allocation2(i, 0);
+      }
+  }
+
+}

@@ -1,0 +1,15 @@
+public class ArrayStack {
+    public Object pop() {
+
+    }
+
+    public void push(Object givenObj) {
+
+    }
+
+    public boolean isEmpty() {
+
+    }
+
+    private Object stackData[50];
+};
