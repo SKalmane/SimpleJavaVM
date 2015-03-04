@@ -1,0 +1,995 @@
+Index: simplejava-assignment5/src/main/java/edu/harvard/cscie98/simplejava/SimpleJavaVm.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- simplejava-assignment5/src/main/java/edu/harvard/cscie98/simplejava/SimpleJavaVm.java	(date 1416251245000)
++++ simplejava-assignment5/src/main/java/edu/harvard/cscie98/simplejava/SimpleJavaVm.java	(date 1418250344000)
+@@ -12,6 +12,8 @@
+ import edu.harvard.cscie98.simplejava.impl.memory.heap.HeapImpl;
+ import edu.harvard.cscie98.simplejava.impl.memory.memorymanager.GenerationalMemoryManager;
+ import edu.harvard.cscie98.simplejava.impl.memory.memorymanager.GenerationalWriteBarrier;
++import edu.harvard.cscie98.simplejava.impl.memory.memorymanager.MarkSweepMemoryManager;
++import edu.harvard.cscie98.simplejava.impl.memory.memorymanager.SemiSpaceMemoryManager;
+ import edu.harvard.cscie98.simplejava.impl.objectmodel.ObjectBuilderImpl;
+ import edu.harvard.cscie98.simplejava.impl.threads.JvmThreadImpl;
+ import edu.harvard.cscie98.simplejava.vm.classloader.TypeFactory;
+@@ -91,12 +93,12 @@
+     vm.barrier = createOrSub(WriteBarrier.class, barrier, objects);
+     final MemoryManager mm = new GenerationalMemoryManager(vm.heapParams, vm.thread,
+         vm.objectBuilder, vm.classLoader, (GenerationalWriteBarrier) vm.barrier);
+-    // final MemoryManager mm = new MarkSweepMemoryManager(vm.heapParams,
++    //final MemoryManager mm = new MarkSweepMemoryManager(vm.heapParams,
+-    // vm.thread, vm.objectBuilder,
++    //vm.thread, vm.objectBuilder,
+-    // vm.classLoader);
++    //vm.classLoader);
+-    // final MemoryManager mm = new SemiSpaceMemoryManager(vm.heapParams,
++    //final MemoryManager mm = new SemiSpaceMemoryManager(vm.heapParams,
+-    // vm.thread, vm.objectBuilder,
++    //vm.thread, vm.objectBuilder,
+-    // vm.classLoader);
++    //vm.classLoader);
+     vm.memoryManager = createOrSub(MemoryManager.class, mm, objects);
+     ((ObjectBuilderImpl) vm.objectBuilder).setMemoryManager(mm);
+ 
+Index: simplejava-assignment5/src/main/java/edu/harvard/cscie98/simplejava/impl/interpreter/bytecodes/AastoreInst.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- simplejava-assignment5/src/main/java/edu/harvard/cscie98/simplejava/impl/interpreter/bytecodes/AastoreInst.java	(date 1416251245000)
++++ simplejava-assignment5/src/main/java/edu/harvard/cscie98/simplejava/impl/interpreter/bytecodes/AastoreInst.java	(date 1418250344000)
+@@ -34,6 +34,11 @@
+     }
+ 
+     final HeapObject obj = arrayRef.dereference();
++
++    if(val instanceof HeapPointer) {
++        barrier.onPointerWrite(obj, (HeapPointer)val);
++    }
++
+     obj.setValueAtOffset(index, val);
+ 
+     frame.setProgramCounter(pc + 1);
+Index: simplejava-assignment5/src/main/java/edu/harvard/cscie98/simplejava/impl/interpreter/bytecodes/InvokevirtualInst.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- simplejava-assignment5/src/main/java/edu/harvard/cscie98/simplejava/impl/interpreter/bytecodes/InvokevirtualInst.java	(date 1416251245000)
++++ simplejava-assignment5/src/main/java/edu/harvard/cscie98/simplejava/impl/interpreter/bytecodes/InvokevirtualInst.java	(date 1418250344000)
+@@ -5,6 +5,7 @@
+ 
+ import edu.harvard.cscie98.simplejava.config.Log;
+ import edu.harvard.cscie98.simplejava.impl.interpreter.InterpreterUtils;
++import edu.harvard.cscie98.simplejava.vm.VmInternalError;
+ import edu.harvard.cscie98.simplejava.vm.classloader.TypeFactory;
+ import edu.harvard.cscie98.simplejava.vm.classloader.TypeName;
+ import edu.harvard.cscie98.simplejava.vm.classloader.VmClass;
+@@ -43,6 +44,9 @@
+     }
+     final ObjectHeader header = target.dereference().getHeader();
+ 
++      if(header.getWord(ObjectHeader.CLASS_DESCRIPTOR_WORD) instanceof HeapPointer) {
++          throw new VmInternalError("Shouldn't be HeapPointer..");
++      }
+     ObjectTypeDescriptor desc = (ObjectTypeDescriptor) header
+         .getWord(ObjectHeader.CLASS_DESCRIPTOR_WORD);
+     TypeName clsName = desc.getTypeName();
+Index: simplejava-assignment5/src/main/java/edu/harvard/cscie98/simplejava/impl/interpreter/bytecodes/PutfieldInst.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- simplejava-assignment5/src/main/java/edu/harvard/cscie98/simplejava/impl/interpreter/bytecodes/PutfieldInst.java	(date 1416251245000)
++++ simplejava-assignment5/src/main/java/edu/harvard/cscie98/simplejava/impl/interpreter/bytecodes/PutfieldInst.java	(date 1418250344000)
+@@ -25,6 +25,9 @@
+       InterpreterUtils.throwException(exceptionName, stack, frame, pc, objectBuilder);
+       return;
+     }
++    if(val instanceof HeapPointer) {
++        barrier.onPointerWrite(obj, (HeapPointer)val);
++    }
+     obj.setValueAtOffset(idx, val);
+     frame.setProgramCounter(pc + 3);
+   }
+Index: simplejava-assignment5/src/main/java/edu/harvard/cscie98/simplejava/impl/memory/heap/BlockOfMemory.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- simplejava-assignment5/src/main/java/edu/harvard/cscie98/simplejava/impl/memory/heap/BlockOfMemory.java	(date 1418250344000)
++++ simplejava-assignment5/src/main/java/edu/harvard/cscie98/simplejava/impl/memory/heap/BlockOfMemory.java	(date 1418250344000)
+@@ -0,0 +1,43 @@
++package edu.harvard.cscie98.simplejava.impl.memory.heap;
++
++import edu.harvard.cscie98.simplejava.vm.memory.Heap;
++import edu.harvard.cscie98.simplejava.vm.objectmodel.HeapPointer;
++
++/**
++ * Created by shashank on 11/23/14.
++ */
++public class BlockOfMemory {
++    private HeapPointer baseAddress;
++    private long sizeOfBlock;
++
++    BlockOfMemory(HeapPointer heapPointer, long blockSize) {
++        this.baseAddress = heapPointer;
++        this.sizeOfBlock = blockSize;
++    }
++
++    public HeapPointer getBaseAddress() {
++        return baseAddress;
++    }
++
++    public long getSizeOfBlock() {
++        return sizeOfBlock;
++    }
++
++    public boolean canFitInBlock(long bytes) {
++        return(bytes <= sizeOfBlock);
++    }
++
++    public BlockOfMemory createNewBlockOfMemory(long bytes) {
++        if(canFitInBlock(bytes)) {
++            HeapPointer newBaseAddress = baseAddress.add(bytes);
++            long newBlockSize =  sizeOfBlock - bytes;
++            return new BlockOfMemory(newBaseAddress, newBlockSize);
++        } else {
++            return null;
++        }
++    }
++
++    public boolean doesBlockEndAtHeapPointer(HeapPointer ptr) {
++        return baseAddress.add(sizeOfBlock).equals(ptr);
++    }
++}
+Index: simplejava-assignment5/src/main/java/edu/harvard/cscie98/simplejava/impl/memory/heap/NonContiguousRegion.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- simplejava-assignment5/src/main/java/edu/harvard/cscie98/simplejava/impl/memory/heap/NonContiguousRegion.java	(date 1416251245000)
++++ simplejava-assignment5/src/main/java/edu/harvard/cscie98/simplejava/impl/memory/heap/NonContiguousRegion.java	(date 1418250344000)
+@@ -5,9 +5,23 @@
+ import edu.harvard.cscie98.simplejava.vm.objectmodel.HeapObject;
+ import edu.harvard.cscie98.simplejava.vm.objectmodel.HeapPointer;
+ 
++import java.util.*;
++
+ public class NonContiguousRegion implements Region {
+ 
++  private final HeapPointer baseAddress;
++  private final HeapPointer limit;
++  private final long extent;
++  private TreeMap<HeapPointer, BlockOfMemory> freeList;
++  private TreeMap<HeapPointer, BlockOfMemory> listOfObjects;
++
+   NonContiguousRegion(final HeapPointer baseAddress, final long extent) {
++      this.baseAddress = baseAddress;
++      this.limit = baseAddress.add(extent);
++      this.extent = extent;
++      this.freeList = new TreeMap<>();
++      this.freeList.put(baseAddress, new BlockOfMemory(baseAddress, extent));
++      this.listOfObjects = new TreeMap<>();
+   }
+ 
+   @Override
+@@ -17,17 +31,92 @@
+ 
+   @Override
+   public HeapPointer allocate(final long bytes) {
+-    throw new RuntimeException("Unimplemented");
++      for(HeapPointer address: freeList.keySet()) {
++          BlockOfMemory freeBlock = freeList.get(address);
++          if(freeBlock.canFitInBlock(bytes)) {
++              freeList.remove(address);
++              BlockOfMemory newBlockOfMemory = freeBlock.createNewBlockOfMemory(bytes);
++              BlockOfMemory objectBlock = new BlockOfMemory(address, bytes);
++              if(newBlockOfMemory.getSizeOfBlock() != 0) {
++                  // Add to freeList if size of block is non zero.
++                  freeList.put(address.add(bytes), newBlockOfMemory);
+-  }
++              }
++              listOfObjects.put(address, objectBlock);
++              return address;
++          }
++      }
++      return HeapPointer.NULL;
++  }
+ 
+   @Override
+   public void free(final HeapObject obj) {
+-    throw new RuntimeException("Unimplemented");
++      HeapPointer ptr = obj.getAddress();
++      if(ptr == HeapPointer.NULL) {
++          throw new VmInternalError("Object does not have a valid HeapPointer..");
+-  }
++      }
++      BlockOfMemory memoryCorrespondingToObj = listOfObjects.get(ptr);
++      if(memoryCorrespondingToObj == null) {
++          throw new VmInternalError("Object does not exist in object List in mature space..");
++      }
++      listOfObjects.remove(ptr);
++      coalesceFreeBlocks(ptr, memoryCorrespondingToObj, freeList);
++  }
+ 
++  /**
++   * Get a pointer to the first address in this region.
++   *
++   * @return A {@link HeapPointer} that refers to the region base.
++   */
++  public HeapPointer getBase() {
++      return baseAddress;
++  }
++
++  public long getExtent() {
++    return extent;
++  }
++
++  public TreeMap<HeapPointer, BlockOfMemory> getListOfObjects() {
++      return listOfObjects;
++  }
++
+   @Override
+   public boolean pointerInRegion(final HeapPointer ptr) {
+-    throw new RuntimeException("Unimplemented");
++      if (ptr == HeapPointer.NULL) {
++          return false;
+-  }
++      }
++      if (ptr.compareTo(baseAddress) < 0) {
++          return false;
++      }
++      if (ptr.compareTo(limit) >= 0) {
++          return false;
++      }
++      return true;
++  }
+ 
++  private static void coalesceFreeBlocks(HeapPointer startingAddressOfBlockOfMemory,
++                                         BlockOfMemory memoryCorrespondingToObj,
++                                         TreeMap<HeapPointer, BlockOfMemory> freeList) {
++      long sizeOfBlockOfMemory = memoryCorrespondingToObj.getSizeOfBlock();
++      HeapPointer lowerEntry = HeapPointer.NULL;
++      HeapPointer higherEntry = HeapPointer.NULL;
++      Map.Entry<HeapPointer, BlockOfMemory> entry  = freeList.lowerEntry(startingAddressOfBlockOfMemory);
++      if(entry != null) {
++          lowerEntry = entry.getKey();
++      }
++      if((lowerEntry != HeapPointer.NULL) && (freeList.get(lowerEntry).doesBlockEndAtHeapPointer(startingAddressOfBlockOfMemory))) {
++          startingAddressOfBlockOfMemory = lowerEntry;
++          sizeOfBlockOfMemory = sizeOfBlockOfMemory + freeList.get(lowerEntry).getSizeOfBlock();
++          freeList.remove(lowerEntry);
++      }
++      entry = freeList.higherEntry(startingAddressOfBlockOfMemory);
++      if(entry != null) {
++          higherEntry = entry.getKey();
++      }
++      if((higherEntry != HeapPointer.NULL) && (memoryCorrespondingToObj.doesBlockEndAtHeapPointer(higherEntry))) {
++          sizeOfBlockOfMemory = sizeOfBlockOfMemory + freeList.get(higherEntry).getSizeOfBlock();
++          freeList.remove(higherEntry);
++      }
++      BlockOfMemory freeBlock = new BlockOfMemory(startingAddressOfBlockOfMemory, sizeOfBlockOfMemory);
++      freeList.put(startingAddressOfBlockOfMemory, freeBlock);
++  }
+-}
++}
+\ No newline at end of file
+Index: simplejava-assignment5/src/main/java/edu/harvard/cscie98/simplejava/impl/memory/memorymanager/GenerationalMemoryManager.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- simplejava-assignment5/src/main/java/edu/harvard/cscie98/simplejava/impl/memory/memorymanager/GenerationalMemoryManager.java	(date 1416251245000)
++++ simplejava-assignment5/src/main/java/edu/harvard/cscie98/simplejava/impl/memory/memorymanager/GenerationalMemoryManager.java	(date 1418250344000)
+@@ -1,27 +1,391 @@
+ package edu.harvard.cscie98.simplejava.impl.memory.memorymanager;
+ 
+ import edu.harvard.cscie98.simplejava.config.HeapParameters;
++import edu.harvard.cscie98.simplejava.config.Log;
++import edu.harvard.cscie98.simplejava.impl.memory.heap.BumpPointerRegion;
++import edu.harvard.cscie98.simplejava.vm.VmInternalError;
+ import edu.harvard.cscie98.simplejava.vm.classloader.VmClassLoader;
++import edu.harvard.cscie98.simplejava.vm.classloader.VmField;
++import edu.harvard.cscie98.simplejava.vm.memory.Heap;
+ import edu.harvard.cscie98.simplejava.vm.memory.MemoryManager;
+-import edu.harvard.cscie98.simplejava.vm.objectmodel.HeapPointer;
+-import edu.harvard.cscie98.simplejava.vm.objectmodel.ObjectBuilder;
++import edu.harvard.cscie98.simplejava.vm.objectmodel.*;
+ import edu.harvard.cscie98.simplejava.vm.threads.JvmThread;
+ 
++import java.util.ArrayList;
++import java.util.List;
++import java.util.Set;
++import java.util.Stack;
++
+ public class GenerationalMemoryManager implements MemoryManager {
+ 
++    private final BumpPointerRegion nurseryRegion;
++
++    private JvmThread thread;
++    private long allocated, deleted;
++    private Set<HeapObject> rememberedSet;
++    private int gcCount;
++    private Stack<HeapObject> grayStack;
++    private VmClassLoader classLoader;
++    private ObjectBuilder objectBuilder;
++    private MarkSweepMemoryManager markSweepMemoryManager;
++    private Heap heap;
++
+   public GenerationalMemoryManager(final HeapParameters heapParams, final JvmThread thread,
+       final ObjectBuilder objectBuilder, final VmClassLoader classLoader,
+       final GenerationalWriteBarrier barrier) {
++      nurseryRegion = heapParams.getHeap().getBumpPointerRegion(heapParams.getBaseAddress(),
++              heapParams.getNurserySize());
++      this.thread = thread;
++      rememberedSet = barrier.getRememberedSet();
++      grayStack = new Stack<>();
++      this.classLoader = classLoader;
++      this.objectBuilder = objectBuilder;
++      this.markSweepMemoryManager = new MarkSweepMemoryManager(heapParams, thread, objectBuilder, classLoader);
++      this.heap = heapParams.getHeap();
++      allocated = 0;
++      deleted = 0;
++      gcCount = 0;
+   }
+ 
+   @Override
+   public HeapPointer allocate(final long bytes) {
+-    throw new RuntimeException("Unimplemented");
++      //  need to remove the following. Temporary....
++//      if(allocated > 128000) {
++//          garbageCollect();
++//      }
++      HeapPointer allocatedPtr = nurseryRegion.allocate(bytes);
++      if (allocatedPtr.equals(HeapPointer.NULL)) {
++          try {
++              garbageCollect();
++          } catch (final OutOfMemoryError e) {
++              Log.gc("Ran out of memory during GC");
+-  }
++          }
++          allocatedPtr = nurseryRegion.allocate(bytes);
++          if (allocatedPtr.equals(HeapPointer.NULL)) {
++              System.err.println("Out of memory");
++          }
++      }
++      allocated += bytes;
++      return allocatedPtr;
++  }
+ 
+   @Override
+   public void garbageCollect() {
+-    throw new RuntimeException("Unimplemented");
++      Log.gc("===== Beginning minor collection ==================");
++      Log.gc("GC " + gcCount + " starting");
++      Log.gc("Total number of bytes allocated before this gc cycle: " + allocated);
++      // Start the count for allocated bytes from zero..
++      allocated = 0;
++      gcCount++;
++      // Set deleted bytes to zero at start of gc cycle.
++      deleted = 0;
++      thread.pause();
++      pushObjectsPointedToByRootsToGrayStack();
++      mark();
++      copyLiveObjectsToMatureSpace();
++      updateAllLiveReferences();
++      nurseryRegion.reset();
++      if(markSweepMemoryManager.getRemainingSpaceInRegion() < 2*(nurseryRegion.getExtent())) {
++          Log.gc("Triggering major collection because available space in mature space is less than twice that of nursery..");
++          markSweepMemoryManager.garbageCollect();
+-  }
++      }
++      markSweepMemoryManager.validateObjectsInRegion();
++      thread.resume();
++      Log.gc("GC complete. Total size of objects moved to mature space: " + deleted + " bytes");
++      Log.gc("===== Ending minor collection ================");
++  }
+ 
++    private void pushObjectsPointedToByRootsToGrayStack() {
++        Log.gc("Getting objects pointed to by root.. ");
++        for (final ReferenceLocation ref : thread.getStack().getStackAndLocalReferenceLocations()) {
++            if (ref.getValue() != HeapPointer.NULL) {
++                HeapObject obj = ref.getValue().dereference();
++                if(nurseryRegion.pointerInRegion(ref.getValue())) {
++                    if(obj.getHeader().getMarkBit()) {
++                        throw new VmInternalError("Object shouldn't be marked yet..");
++                    }
++                    // Push object to gray stack only if it's in the nursery.
++                    grayStack.push(obj);
++                }
++            }
++        }
++
++        for (final ReferenceLocation ref : classLoader.getStaticReferenceLocations()) {
++            if (ref.getValue() != HeapPointer.NULL) {
++                HeapObject obj = ref.getValue().dereference();
++                if(nurseryRegion.pointerInRegion(ref.getValue())) {
++                    if(obj.getHeader().getMarkBit()) {
++                        throw new VmInternalError("Object shouldn't be marked yet..");
++                    }
++                    // Push object to gray stack only if it's in the nursery.
++                    grayStack.push(obj);
++                }
++            }
++        }
++
++        for (final ReferenceLocation ref : objectBuilder.getInternTableReferences()) {
++            if (ref.getValue() != HeapPointer.NULL) {
++                HeapObject obj = ref.getValue().dereference();
++                if(nurseryRegion.pointerInRegion(ref.getValue())) {
++                    if(obj.getHeader().getMarkBit()) {
++                        throw new VmInternalError("Object shouldn't be marked yet..");
++                    }
++                   // Push object to gray stack only if it's in the nursery.
++                    grayStack.push(obj);
++                }
++            }
++        }
++
++        Log.gc("Total number of objects pointed to by root: " + grayStack.size());
++
++        for(final HeapObject obj: rememberedSet) {
++            if(nurseryRegion.pointerInRegion(obj.getAddress())) {
++                throw new VmInternalError("Remembered set should only contain references from mature space to nursery..");
++            }
++            if(obj.getHeader().getMarkBit()) {
++                throw new VmInternalError("Object shouldn't be marked yet..");
++            }
++            grayStack.push(obj);
++        }
++
++        Log.gc("Total number of objects pointed to by root and remembered set: " + grayStack.size());
++    }
++
++    private void mark() {
++        while(!grayStack.empty()) {
++            HeapObject obj = grayStack.pop();
++            if(!nurseryRegion.pointerInRegion(obj.getAddress()) &&
++                    (!rememberedSet.contains(obj))) {
++                throw new VmInternalError("The grayStack contains an object which is in mature space and not in the remembered set. Shouldn't happen.");
++            }
++            Object descWord = obj.getHeader().getWord(ObjectHeader.CLASS_DESCRIPTOR_WORD);
++            if (descWord instanceof HeapPointer) {
++                throw new VmInternalError("ObjectTypeDescriptor should not be a heapPointer. We haven't yet installed forwarding pointers..");
++            }
++            if(descWord instanceof ObjectTypeDescriptor) {
++                pushObjectOntoGrayStack(obj, (ObjectTypeDescriptor) descWord, grayStack);
++            } else {
++                if(!(descWord instanceof ArrayTypeDescriptor)) {
++                  throw new VmInternalError("Not an ArrayTypeDescriptor or ObjectTypeDescriptor. Not possible.");
++                }
++                if (!((ArrayTypeDescriptor) descWord).getElementDescriptor().isPrimitive()) {
++                  pushElementsOfArrayOntoGrayStack(obj, (ArrayTypeDescriptor) descWord, grayStack);
++                }
++            }
++            if(nurseryRegion.pointerInRegion(obj.getAddress())) {
++                // Set the mark bit if the object is in the nursery.
++                obj.getHeader().setMarkBit(true);
++            }
++        }
++    }
++
++    private void pushObjectOntoGrayStack(HeapObject obj, ObjectTypeDescriptor descWord, Stack<HeapObject> grayStack) {
++        List<VmField> fields = descWord.getFields();
++        for (int i = 0; i < fields.size(); i++) {
++            final VmField fld = fields.get(i);
++            if (fld.isReference()) {
++                final HeapPointer ptr = (HeapPointer) obj.getValueAtOffset(i);
++                if (ptr != HeapPointer.NULL) {
++                    HeapObject fieldObj = ptr.dereference();
++                    // If object is already marked or it is in mature space,
++                    // we don't need to push it to gray stack.
++                    if (!fieldObj.getHeader().getMarkBit() &&
++                            nurseryRegion.pointerInRegion(ptr) &&
++                            !grayStack.contains(fieldObj)) {
++                        grayStack.push(fieldObj);
++                    }
++                }
++            }
++        }
++    }
++
++    private void pushElementsOfArrayOntoGrayStack(HeapObject obj, ArrayTypeDescriptor descWord, Stack<HeapObject> grayStack) {
++        final int length = (int) obj.getHeader().getWord(ObjectHeader.ARRAY_LENGTH_WORD);
++        for (int i = 0; i < length; i++) {
++            final HeapPointer ptr = (HeapPointer) obj.getValueAtOffset(i);
++            if ((ptr != HeapPointer.NULL) &&
++                    !ptr.dereference().getHeader().getMarkBit() &&
++                    nurseryRegion.pointerInRegion(ptr) &&
++                    !grayStack.contains(ptr.dereference())) {
++                grayStack.push(ptr.dereference());
++            }
++        }
++    }
++
++    private void copyLiveObjectsToMatureSpace() {
++        HeapPointer ptr = nurseryRegion.getBase();
++        while((nurseryRegion.pointerInRegion(ptr)) &&
++                (ptr.compareTo(nurseryRegion.getAllocationPointer()) < 0)) {
++            if(ptr.equals(HeapPointer.NULL)) {
++                throw new VmInternalError(" HeapPointer in Nursery Region is NULL!");
++            }
++            HeapObject obj = ptr.dereference();
++            if(obj.getHeader().getMarkBit()) {
++                // This is a live object. Need to copy to Mature space
++                obj.getHeader().setMarkBit(false);
++                final long size = obj.getSize();
++                final HeapPointer allocatedPtr = markSweepMemoryManager.allocate(size);
++                if (allocatedPtr.equals(HeapPointer.NULL)) {
++                    throw new OutOfMemoryError();
++                }
++                if(nurseryRegion.pointerInRegion(allocatedPtr)) {
++                    throw new VmInternalError("The allocated pointer during Major Collection is not in the mature space!");
++                }
++                deleted += obj.getSize();
++                heap.memcpy(ptr, allocatedPtr);
++                // Set forwarding pointer at the original object.
++                ptr.dereference().getHeader().setWord(ObjectHeader.CLASS_DESCRIPTOR_WORD, allocatedPtr);
++            }
++            ptr = ptr.add(obj.getSize());
++        }
++    }
++
++    private void updateAllLiveReferences() {
++        Stack<HeapPointer> listOfReferences = updateRootReferencesAndClearRememberedSet();
++
++        while(!listOfReferences.empty()) {
++            HeapPointer ptr = listOfReferences.pop();
++            if(ptr.equals(HeapPointer.NULL)) {
++                throw new VmInternalError("HeapPointer is NULL");
++            }
++            if(nurseryRegion.pointerInRegion(ptr)) {
++                throw new VmInternalError("This is a live object. It should not be in the nursery anymore..");
++            }
++            final TypeDescriptor typeDesc = (TypeDescriptor) ptr.dereference().getHeader().getWord(
++                    ObjectHeader.CLASS_DESCRIPTOR_WORD);
++            if (typeDesc.isObject()) {
++                updateObjectFieldsAndAddToListOfReferences(ptr.dereference(), (ObjectTypeDescriptor) typeDesc, listOfReferences);
++            } else {
++                updateArrayFieldsAndAddToListOfReferences(ptr.dereference(), (ArrayTypeDescriptor) typeDesc, listOfReferences);
++            }
++        }
++    }
++
++    private void updateObjectFieldsAndAddToListOfReferences(final HeapObject obj, final ObjectTypeDescriptor desc,
++                                                            Stack<HeapPointer> listOfReferences) {
++        final List<VmField> fields = desc.getFields();
++        for (int i = 0; i < fields.size(); i++) {
++            final VmField fld = fields.get(i);
++            if (fld.isReference()) {
++                final HeapPointer ptr = (HeapPointer) obj.getValueAtOffset(i);
++                if (ptr != HeapPointer.NULL && nurseryRegion.pointerInRegion(ptr)) {
++                    Object forwardedPtr = ptr.dereference().getHeader().getWord(ObjectHeader.CLASS_DESCRIPTOR_WORD);
++                    if(!(forwardedPtr instanceof HeapPointer)){
++                        throw new VmInternalError("Found an object pointed to by mature space object in nursery, after the sweep phase.. Shouldn't happen.. ");
++                    }
++                    if(nurseryRegion.pointerInRegion((HeapPointer) forwardedPtr)) {
++                        throw new VmInternalError("Forwarded Pointer should not be in the nursery..");
++                    }
++                    if(!listOfReferences.contains(forwardedPtr)) {
++                        listOfReferences.push((HeapPointer) forwardedPtr);
++                    }
++                    obj.setValueAtOffset(i, forwardedPtr);
++                }
++            }
++        }
++    }
++
++    private void updateArrayFieldsAndAddToListOfReferences(final HeapObject arr, final ArrayTypeDescriptor desc,
++                                                           Stack<HeapPointer> listOfReferences) {
++        if (!desc.getElementDescriptor().isPrimitive()) {
++            final int length = (int) arr.getHeader().getWord(ObjectHeader.ARRAY_LENGTH_WORD);
++            for (int i = 0; i < length; i++) {
++                final HeapPointer ptr = (HeapPointer) arr.getValueAtOffset(i);
++                if (ptr != HeapPointer.NULL && nurseryRegion.pointerInRegion(ptr)) {
++                    Object forwardedPtr = ptr.dereference().getHeader().getWord(ObjectHeader.CLASS_DESCRIPTOR_WORD);
++                    if(!(forwardedPtr instanceof HeapPointer)){
++                        throw new VmInternalError("Found an object pointed to by mature space object in nursery, after the sweep phase.. Shouldn't happen.. ");
++                    }
++                    if (nurseryRegion.pointerInRegion((HeapPointer) forwardedPtr)) {
++                        throw new VmInternalError("Forwarded Pointer should not be in the nursery..");
++                    }
++                    if(!listOfReferences.contains(forwardedPtr)) {
++                        listOfReferences.push((HeapPointer) forwardedPtr);
++                    }
++                    arr.setValueAtOffset(i, forwardedPtr);
++                }
++            }
++        }
++    }
++
++    private Stack<HeapPointer> updateRootReferencesAndClearRememberedSet() {
++        Log.gc("Updating root references.. ");
++        Stack<HeapPointer> listOfReferences = new Stack<>();
++
++        for (final ReferenceLocation ref : thread.getStack().getStackAndLocalReferenceLocations()) {
++            if (ref.getValue() != HeapPointer.NULL) {
++                HeapObject obj = ref.getValue().dereference();
++                Object forwardedPtr = obj.getHeader().getWord(ObjectHeader.CLASS_DESCRIPTOR_WORD);
++                if (!(forwardedPtr instanceof HeapPointer) &&
++                        (nurseryRegion.pointerInRegion(ref.getValue()))) {
++                    throw new VmInternalError("Object is in nursery.. Forwarding pointer should have been installed here..");
++                }
++                if(nurseryRegion.pointerInRegion(ref.getValue())) {
++                    if(nurseryRegion.pointerInRegion((HeapPointer) forwardedPtr)) {
++                        throw new VmInternalError("Forwarded Pointer should be in mature space.");
++                    }
++                    ref.setValue((HeapPointer) forwardedPtr);
++                    if(!listOfReferences.contains(forwardedPtr)) {
++                        listOfReferences.push((HeapPointer) forwardedPtr);
++                    }
++                }
++            }
++        }
++
++        for (final ReferenceLocation ref : classLoader.getStaticReferenceLocations()) {
++            if (ref.getValue() != HeapPointer.NULL) {
++                HeapObject obj = ref.getValue().dereference();
++                Object forwardedPtr = obj.getHeader().getWord(ObjectHeader.CLASS_DESCRIPTOR_WORD);
++                if (!(forwardedPtr instanceof HeapPointer) &&
++                        (nurseryRegion.pointerInRegion(ref.getValue()))) {
++                    throw new VmInternalError("Object is in nursery.. Forwarding pointer should have been installed here..");
++                }
++                if(nurseryRegion.pointerInRegion(ref.getValue())) {
++                    if(nurseryRegion.pointerInRegion((HeapPointer) forwardedPtr)) {
++                        throw new VmInternalError("Forwarded Pointer should be in mature space.");
++                    }
++                    ref.setValue((HeapPointer) forwardedPtr);
++                    if(!listOfReferences.contains(forwardedPtr)) {
++                        listOfReferences.push((HeapPointer) forwardedPtr);
++                    }
++                }
++            }
++        }
++
++        for (final ReferenceLocation ref : objectBuilder.getInternTableReferences()) {
++            if (ref.getValue() != HeapPointer.NULL) {
++                HeapObject obj = ref.getValue().dereference();
++                Object forwardedPtr = obj.getHeader().getWord(ObjectHeader.CLASS_DESCRIPTOR_WORD);
++                if (!(forwardedPtr instanceof HeapPointer) &&
++                        (nurseryRegion.pointerInRegion(ref.getValue()))) {
++                    throw new VmInternalError("Object is in nursery.. Forwarding pointer should have been installed here..");
++                }
++                if(nurseryRegion.pointerInRegion(ref.getValue())) {
++                    if(nurseryRegion.pointerInRegion((HeapPointer) forwardedPtr)) {
++                        throw new VmInternalError("Forwarded Pointer should be in mature space.");
++                    }
++                    ref.setValue((HeapPointer) forwardedPtr);
++                    if(!listOfReferences.contains(forwardedPtr)) {
++                        listOfReferences.push((HeapPointer) forwardedPtr);
++                    }
++                }
++            }
++        }
++
++        for(final HeapObject obj: rememberedSet) {
++            if(obj.getHeader().getMarkBit()) {
++                throw new VmInternalError("Mark bit should not be set at this point.");
++            }
++            Object forwardedPtr = obj.getHeader().getWord(ObjectHeader.CLASS_DESCRIPTOR_WORD);
++            if ((forwardedPtr instanceof HeapPointer) ||
++                    (nurseryRegion.pointerInRegion(obj.getAddress()))) {
++                throw new VmInternalError("The object belongs to the remembered set.. It should not have an installed forwarding pointer! Or be in the nursery!");
++            }
++            if(!listOfReferences.contains(obj.getAddress())) {
++                listOfReferences.push(obj.getAddress());
++            }
++        }
++        rememberedSet.clear();
++        return listOfReferences;
++    }
+ }
+Index: simplejava-assignment5/src/main/java/edu/harvard/cscie98/simplejava/impl/memory/memorymanager/GenerationalWriteBarrier.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- simplejava-assignment5/src/main/java/edu/harvard/cscie98/simplejava/impl/memory/memorymanager/GenerationalWriteBarrier.java	(date 1416251245000)
++++ simplejava-assignment5/src/main/java/edu/harvard/cscie98/simplejava/impl/memory/memorymanager/GenerationalWriteBarrier.java	(date 1418250344000)
+@@ -1,31 +1,75 @@
+ package edu.harvard.cscie98.simplejava.impl.memory.memorymanager;
+ 
++import java.util.HashMap;
++import java.util.HashSet;
+ import java.util.Set;
+ 
+ import edu.harvard.cscie98.simplejava.config.HeapParameters;
++import edu.harvard.cscie98.simplejava.vm.memory.Heap;
++import edu.harvard.cscie98.simplejava.vm.memory.MemoryManager;
+ import edu.harvard.cscie98.simplejava.vm.memory.WriteBarrier;
+ import edu.harvard.cscie98.simplejava.vm.objectmodel.HeapObject;
+ import edu.harvard.cscie98.simplejava.vm.objectmodel.HeapPointer;
+ 
+ public class GenerationalWriteBarrier implements WriteBarrier {
+ 
+-  public GenerationalWriteBarrier(final HeapParameters heapParams) {
++  private long nurserySize, sizeOfHeap;
++  private Heap heap;
++  private HeapPointer startOfHeap;
+ 
++  private HashSet<HeapObject> rememberedSet;
++
++  public GenerationalWriteBarrier(final HeapParameters heapParams) {
++      nurserySize = heapParams.getNurserySize();
++      sizeOfHeap = heapParams.getExtent();
++      heap = heapParams.getHeap();
++      startOfHeap = heapParams.getBaseAddress();
++      rememberedSet = new HashSet<>();
+   }
+ 
+   @Override
+   public void onPointerWrite(final HeapObject obj, final HeapPointer ptr) {
+-    throw new RuntimeException("Unimplemented");
++      // If obj is in mature space and ptr is in nursery
++      HeapPointer objectAddress = obj.getAddress();
++      if(isHeapPointerInMatureSpace(objectAddress) && isHeapPointerInNursery(ptr)) {
++          rememberedSet.add(obj);
+-  }
++      }
++  }
+ 
+   @Override
+   public Set<HeapObject> getRememberedSet() {
+-    throw new RuntimeException("Unimplemented");
++    return rememberedSet;
+   }
+ 
+   @Override
+   public void clearRememberedSet() {
+-    throw new RuntimeException("Unimplemented");
++    rememberedSet.clear();
++  }
++
++  private boolean isHeapPointerInNursery(HeapPointer ptr) {
++      if (ptr == HeapPointer.NULL) {
++          return false;
++      }
++      if (ptr.compareTo(startOfHeap) < 0) {
++          return false;
++      }
++      if (ptr.compareTo(startOfHeap.add(nurserySize)) >= 0) {
++          return false;
++      }
++      return true;
++  }
++
++  private boolean isHeapPointerInMatureSpace(HeapPointer ptr) {
++      if (ptr == HeapPointer.NULL) {
++          return false;
++      }
++      if (ptr.compareTo(startOfHeap.add(nurserySize)) < 0) {
++          return false;
++      }
++      if (ptr.compareTo(startOfHeap.add(sizeOfHeap)) >= 0) {
++          return false;
++      }
++      return true;
+   }
+ 
+ }
+Index: simplejava-assignment5/src/main/java/edu/harvard/cscie98/simplejava/impl/memory/memorymanager/MarkSweepMemoryManager.java
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+--- simplejava-assignment5/src/main/java/edu/harvard/cscie98/simplejava/impl/memory/memorymanager/MarkSweepMemoryManager.java	(date 1416251245000)
++++ simplejava-assignment5/src/main/java/edu/harvard/cscie98/simplejava/impl/memory/memorymanager/MarkSweepMemoryManager.java	(date 1418250344000)
+@@ -1,25 +1,210 @@
+ package edu.harvard.cscie98.simplejava.impl.memory.memorymanager;
+ 
+ import edu.harvard.cscie98.simplejava.config.HeapParameters;
++import edu.harvard.cscie98.simplejava.config.Log;
++import edu.harvard.cscie98.simplejava.impl.memory.heap.BlockOfMemory;
++import edu.harvard.cscie98.simplejava.impl.memory.heap.NonContiguousRegion;
++import edu.harvard.cscie98.simplejava.vm.VmInternalError;
+ import edu.harvard.cscie98.simplejava.vm.classloader.VmClassLoader;
++import edu.harvard.cscie98.simplejava.vm.classloader.VmField;
++import edu.harvard.cscie98.simplejava.vm.memory.Heap;
+ import edu.harvard.cscie98.simplejava.vm.memory.MemoryManager;
+-import edu.harvard.cscie98.simplejava.vm.objectmodel.HeapPointer;
+-import edu.harvard.cscie98.simplejava.vm.objectmodel.ObjectBuilder;
++import edu.harvard.cscie98.simplejava.vm.memory.Region;
++import edu.harvard.cscie98.simplejava.vm.objectmodel.*;
+ import edu.harvard.cscie98.simplejava.vm.threads.JvmThread;
+ 
++import java.util.*;
++
+ public class MarkSweepMemoryManager implements MemoryManager {
+ 
++  private JvmThread thread;
++  private VmClassLoader classLoader;
++  private Heap heap;
++  private ObjectBuilder objectBuilder;
++  private NonContiguousRegion region;
++  private Stack<HeapObject> grayStack;
++  int gcCount = 0;
++  long deleted, allocated;
++
+   public MarkSweepMemoryManager(final HeapParameters heapParams, final JvmThread thread,
+       final ObjectBuilder objectBuilder, final VmClassLoader classLoader) {
++      this.thread = thread;
++      this.objectBuilder = objectBuilder;
++      this.classLoader = classLoader;
++      heap = heapParams.getHeap();
++      allocated = 0;
++      deleted = 0;
++      final long nurserySize = heapParams.getNurserySize();
++      final HeapPointer baseAddress = heapParams.getBaseAddress();
++      final HeapPointer matureSpaceBaseAddress = heapParams.getBaseAddress().add(nurserySize);
++      region = heap.getNonContiguousRegion(matureSpaceBaseAddress, (heapParams.getExtent() - nurserySize));
++      grayStack = new Stack<>();
++      Log.gc("Region: " + region.getBase() + "-" + region.getBase().add(region.getExtent()));
+   }
+ 
+   @Override
+   public HeapPointer allocate(final long bytes) {
+-    throw new RuntimeException("Unimplemented");
++      HeapPointer allocatedPtr = region.allocate(bytes);
++      if (allocatedPtr == HeapPointer.NULL) {
++          try {
++              garbageCollect();
++          } catch (final OutOfMemoryError e) {
++              Log.gc("Ran out of memory during GC");
+-  }
++          }
++          allocatedPtr = region.allocate(bytes);
++          if (allocatedPtr == HeapPointer.NULL) {
++              System.err.println("Out of memory");
++          }
++      }
++      allocated += bytes;
++      return allocatedPtr;
++  }
+ 
+   @Override
+   public void garbageCollect() {
+-    throw new RuntimeException("Unimplemented");
++      Log.gc("****** Beginning major collection ******");
++      Log.gc("GC " + gcCount + " starting");
++      Log.gc("Total number of bytes allocated before this gc cycle: " + allocated);
++      // Start the count for allocated bytes from zero..
++      allocated = 0;
++      gcCount++;
++      // Set deleted bytes to zero at start of gc cycle.
++      deleted = 0;
++      pushObjectsPointedToByRootsToGrayStack();
++      handleGrayStack();
++      sweep();
++      Log.gc("GC complete. Deleted " + deleted + " bytes");
++      Log.gc("****** Ending major collection ******");
++  }
++
++    public long getRemainingSpaceInRegion() {
++        long sizeOfAllocatedBlocks = 0;
++        for(BlockOfMemory blk: region.getListOfObjects().values()) {
++            sizeOfAllocatedBlocks += blk.getSizeOfBlock();
++        }
++        return (region.getExtent() - sizeOfAllocatedBlocks);
++    }
++
++    public void validateObjectsInRegion() {
++        for (HeapPointer ptr : region.getListOfObjects().keySet()) {
++            if (ptr.equals(HeapPointer.NULL)) {
++                throw new VmInternalError("One of the objects in the mature space is NULL..");
++            }
++            if (ptr.dereference().getHeader().getWord(ObjectHeader.CLASS_DESCRIPTOR_WORD) instanceof HeapPointer) {
++                throw new VmInternalError("How does the header of the object have a pointer instead of Obj Descriptor?");
++            }
++        }
++    }
++
++  private void pushObjectsPointedToByRootsToGrayStack() {
++      Log.gc("Getting objects pointed to by root.. ");
++      for (final ReferenceLocation ref : thread.getStack().getStackAndLocalReferenceLocations()) {
++          if (ref.getValue() != HeapPointer.NULL) {
++              HeapObject obj = ref.getValue().dereference();
++              // If object is already marked, we don't need to push it to
++              // gray stack.
++              if(!obj.getHeader().getMarkBit()) {
++                  grayStack.push(obj);
++              }
++          }
++      }
++
++      for (final ReferenceLocation ref : classLoader.getStaticReferenceLocations()) {
++          if (ref.getValue() != HeapPointer.NULL) {
++              HeapObject obj = ref.getValue().dereference();
++              // If object is already marked, we don't need to push it to
++              // gray stack.
++              if(!obj.getHeader().getMarkBit()) {
++                  grayStack.push(obj);
++              }
++          }
++      }
++
++      for (final ReferenceLocation ref : objectBuilder.getInternTableReferences()) {
++          if (ref.getValue() != HeapPointer.NULL) {
++              HeapObject obj = ref.getValue().dereference();
++              // If object is already marked, we don't need to push it to
++              // gray stack.
++              if(!obj.getHeader().getMarkBit()) {
++                  grayStack.push(obj);
++              }
++          }
++      }
++      Log.gc("Total number of objects pointed to by root: " + grayStack.size());
++  }
++
++  private void handleGrayStack() {
++      Log.gc(" Handling elements in the gray stack.");
++      while(!grayStack.empty()) {
++          HeapObject obj = grayStack.pop();
++          Object descWord = obj.getHeader().getWord(ObjectHeader.CLASS_DESCRIPTOR_WORD);
++          if (descWord instanceof HeapPointer) {
++              throw new VmInternalError("ObjectTypeDescriptor should not be a heapPointer. We don't install forwarding pointers..");
++          }
++          if(descWord instanceof ObjectTypeDescriptor) {
++              pushObjectOntoGrayStack(obj, (ObjectTypeDescriptor) descWord, grayStack);
++          } else {
++              if(!(descWord instanceof ArrayTypeDescriptor)) {
++                  throw new VmInternalError("Not an ArrayTypeDescriptor or ObjectTypeDescriptor. Not possible.");
++              }
++              if (!((ArrayTypeDescriptor) descWord).getElementDescriptor().isPrimitive()) {
++                  pushElementsOfArrayOntoGrayStack(obj, (ArrayTypeDescriptor) descWord, grayStack);
++              }
++          }
++          obj.getHeader().setMarkBit(true);
++      }
++  }
++
++  private void pushObjectOntoGrayStack(HeapObject obj, ObjectTypeDescriptor descWord, Stack<HeapObject> grayStack) {
++      List<VmField> fields = descWord.getFields();
++      for (int i = 0; i < fields.size(); i++) {
++          final VmField fld = fields.get(i);
++          if (fld.isReference()) {
++              final HeapPointer ptr = (HeapPointer) obj.getValueAtOffset(i);
++              if (ptr != HeapPointer.NULL) {
++                  HeapObject fieldObj = ptr.dereference();
++                  // If object is already marked, we don't need to push it to
++                  // gray stack.
++                  if (!grayStack.contains(fieldObj)) {
++                      grayStack.push(fieldObj);
++                  }
++              }
++          }
++      }
++  }
++
++    private void pushElementsOfArrayOntoGrayStack(HeapObject obj, ArrayTypeDescriptor descWord, Stack<HeapObject> grayStack) {
++        final int length = (int) obj.getHeader().getWord(ObjectHeader.ARRAY_LENGTH_WORD);
++        for (int i = 0; i < length; i++) {
++            final HeapPointer ptr = (HeapPointer) obj.getValueAtOffset(i);
++            if (ptr != HeapPointer.NULL && region.pointerInRegion(ptr)) {
++                grayStack.push(ptr.dereference());
++            }
++        }
++    }
++
++  private void sweep() {
++      Log.gc("Commencing Sweep. Total number of objects: " + region.getListOfObjects().size());
++      Map<HeapPointer, BlockOfMemory> listOfObjects = region.getListOfObjects();
++      List<HeapObject> objectsToBeFreed = new ArrayList<>();
++      for(HeapPointer ptr: listOfObjects.keySet()) {
++          if(!region.pointerInRegion(ptr)) {
++              throw new VmInternalError("The HeapPointer is not in the region!");
++          }
++          HeapObject obj = ptr.dereference();
++          if(!(obj instanceof HeapObject)) {
++              throw new VmInternalError("HeapPointer does not point to a HeapObject!");
++          }
++          if(!obj.getHeader().getMarkBit()) {
++              objectsToBeFreed.add(ptr.dereference());
++          } else {
++              obj.getHeader().setMarkBit(false);
++          }
++      }
++      Log.gc("Number of objects to be freed: " + objectsToBeFreed.size());
++      for(HeapObject obj: objectsToBeFreed) {
++          deleted += obj.getSize();
++          region.free(obj);
++      }
+   }
+ }

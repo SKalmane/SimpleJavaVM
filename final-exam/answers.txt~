@@ -1,0 +1,53 @@
+* Question 1: Application Startup
+  You are the tech lead on a development team that maintains a major commercial Java Virtual Machine. Your sales
+  organization have complained that they are losing contracts because your VM under-performs on a certain benchmark
+  suite. Upon analyzing the benchmarks, you find that the startup time for your VM is to blame; the benchmarks put a
+  heavy weighting on the work performed in the first few tens of seconds of the VM’s run.
+  You have been instructed by management to improve performance in the early stages of the VM’s run. Describe some
+  of the issues that affect VM startup time, and discuss how you might design or configure your VM to minimize early
+  performance costs.
+  Situation: The VM under-performs on a certain benchmark suite. The benchmark puts heavy weighting on the
+  work performed in the first tens of seconds of the VM's run.
+  Therefore, to improve the benchmark performance, need to improve early stage performance of the VM.
+  What are the issues that affect VM startup time, and how might we design or configure our VM to minimize these
+  issues?
+  
+
+* Answer 1: Order in which we do things: 
+** 1. Use javac to compile the program into bytecode i.e., program ----> javac ------> bytecode 
+** 2. The VM takes as its input the class file and runs the program. 
+** 3. Initially, the VM interprets the code. 
+** 4. Template Interpreter is something that is constructed on the fly, when the program is waiting to start running.
+      This can take up time in the beginning. Though it is more efficient than the Switch Interpreter, it can end up 
+   causing an increase in the startup time - useful for server side applications which run for a long time, not 
+   so much for short client side applications, where the startup time caused by the use of such an interpreter
+   can end up mroe than offsetting the efficiency and steady state performance boost provided by the use of 
+   such an interpreter. 
+** 5. Bootstrap class loader --> System class loader --> Context class loader. If a class not found amongst all three, 
+   we throw ClassNotFoundException
+** 6. ClassLoading has loading, linking and initialization. 
+** 7. Generally, classloading algo is lazy. Only loads class files that need to be loaded. 
+** 8. Upfront verification of the bytecode can also add to startup time. Verifying each bytecode speeds up startup time, 
+   but makes each bytecode's execution slower. 
+** 9. Class Hierarchy Analysis can take time as well. 
+   
+
+* Question 2: Memory management
+** Has JNI, needs to be used on an embedded processor => Copying collector - bad idea.
+** Processor in question: Single core processor with 2 threads
+** Relatively small main memory => we need good throughput i.e., faster cycles of GC 
+   to clean up memory
+** Single level of cache
+** Relatively long latency between main memory and cache => We would want good cache 
+   performance to limit the number of times we need to get instructions from cache
+** This is a server application => Pause times not a concern
+** 
+
+   
+* Answer 2: 
+  
+* Question 3: Refactoring
+  
+* Question 4: Highly concurrent JVM 
+
+* Question 5: Decompiling

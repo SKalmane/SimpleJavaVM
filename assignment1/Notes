@@ -1,0 +1,2 @@
+IincInst.java - I tried calling Iaddinst.interpret and then popping the stack to obtain the added value - and then setting this added value as a local variable. However, this didn't work and showed some weird aload_null statements in the verboseinterpreter results. 
+

@@ -1,0 +1,34 @@
+public class StackReverse {
+
+    public StackReverse() {
+
+    }
+
+    public void ArrayReverse(Integer[] inputArray) {
+	int length = inputArray.length();
+	int maxLengthOfStack = 50;
+	int numofStacks = (int)length/maxLengthOfStack;
+	ArrayStack[] setOfStacks = new Arraystack[numOfStacks];
+	int sizeOfLastStack = length % maxLengthOfStack;
+	for(int i = 0; i < numOfStacks; i++) {
+	    setOfStacks[i] = new ArrayStack();
+	    for(int j = 0; j < maxLengthOfStack; j++) {
+		index = i*maxLengthOfStack + j; 
+		if(index > length) {
+		    break;
+		}
+		setOfStacks[i].push(inputArray[index]);
+	    }
+	}
+	
+	int k = 0;
+	for(int i = numOfStacks; i >= 0; i--) {
+	    ArrayStack stack = setOfStacks[i];
+	    while(!stack.isEmpty()) {
+		inputArray[k] = stack.pop();
+		k++;
+	    }
+	}
+    }
+
+}

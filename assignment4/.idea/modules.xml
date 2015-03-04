@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="ProjectModuleManager">
+    <modules>
+      <module fileurl="file://$PROJECT_DIR$/class-lib/class-lib.iml" filepath="$PROJECT_DIR$/class-lib/class-lib.iml" />
+      <module fileurl="file://$PROJECT_DIR$/sample-code/sample-code.iml" filepath="$PROJECT_DIR$/sample-code/sample-code.iml" />
+      <module fileurl="file://$PROJECT_DIR$/simplejava-assignment4/simplejava-assignment4.iml" filepath="$PROJECT_DIR$/simplejava-assignment4/simplejava-assignment4.iml" />
+    </modules>
+  </component>
+</project>
+

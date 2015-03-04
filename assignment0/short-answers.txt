@@ -1,0 +1,21 @@
+1. The role of Error, Exception and RunTimeException: 
+   - A java exception is a checked exception - these are conditions that a program should recover from, through the use of try and catch statements. Examples of checked exceptions would be a java.io.FileNotFound exception, which a program should be able to recover from and notify the user about.
+  - A RunTimeException is an unchecked exception which is usually the result of a programming bug and result from errors internal to the application. RunTimeExceptions can be caught, but usually, the right way to handle this would be to fix the underlying cause. 
+  - Error - These are exceptions that are caused to conditions external to the application (e.g., because of a system malfunction). Again, a program can choose to catch this exception, but in most cases, since the cause is external, printing a stack trace and exiting the application would be ok.
+
+2. A static method belongs to the class whereas an instance method would be associated with an instance of the class. Static methods cannot access the data members of an instance and usually only act upon the input arguments provided to the method. Also, an instance method is called by prefixing the method name by the name of the instance, whereas a static method is called by prefixing the method name by the name of the class (e.g., Math.sqrt(2))
+
+3. In descending order of speed of access: 
+   Processor Registers > L1 Cache > L2 Cache > RAM > SSD Disk Drive > Magnetic Disk Drive > Tape Storage
+
+4. (a) malloc: malloc is used to dynamically allocate 'x' bytes of memory (x being the input argument to malloc). The pointer to the memory is returned by the call to malloc. It is important to note that the memory allocated is uninitialized. 
+   (b) free: free would deallocate the memory pointed to by its input argument ptr. 
+   (c) memcpy: a call to memcpy(void *dest, void *src, int n) would result in n bytes of data being copied from the address being pointed to by src to the address being pointed to by dest.
+   (d) memset: a call to memset(void *s, int c, int n) would result in the value c being filled in n bytes of memory starting with the address pointed to by s. 
+
+5. A final method in java is a method in a class that cannot be overriden by a subclass. 
+   A final field in java corresponds to a data member of a class that is 'constant' or cannot be changed once assigned (either at the point of declaration or in the constructor). 
+
+6. 'Method overriding' corresponds to the process where in a method in a base class is 'overriden' by a different implementation in its derived class so that when the method is called on the derived class, the implementation would be that of the overriden derived class method. It is important to note here that the overridden method in the derived class has the same function signature as the parent class : for example foo(bar1 a, bar2 b) - the signature would be the same in the entire class hierarchy
+
+  'Method overloading' corresponds to when a method is implemented multiple times in the class but with different arguments - for example foo(bar1 a, bar2 b) and foo(bar3 c, bar4 d) - both the implementations of foo here exist in the same class, but due to their input arguments being different - they would be different methods. Therefore, based upon the input arguments being passed, the corresponding method would be called. 
